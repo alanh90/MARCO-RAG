@@ -1,74 +1,76 @@
 # infinite-context.py
-from util import load_env_var
+import util
 from gpt_handler import GPTHandler
 import psycopg2
-from pgvector import register_vector
+import numpy as np
+from psycopg2.extras import execute_values
 
-# Set up your database connection string from environment variables
-TIMESCALE_CONNECTION_STRING = load_env_var('TIMESCALE_CONNECTION_STRING')
+# Retrieve database connection string from environment variables
+DB_CONNECTION_STRING = util.get_environment_variable('DB_CONNECTION_STRING')
 
 # Instantiate GPTHandler with your chosen model
 gpt = GPTHandler(model="gpt-3.5-turbo-1106")
 
 # Connect to the PostgreSQL database
-conn = psycopg2.connect(TIMESCALE_CONNECTION_STRING)
-register_vector(conn)
+conn = psycopg2.connect(DB_CONNECTION_STRING)
 cur = conn.cursor()
 
-# Define the table schema for the summaries
+# Enable pgvector extension
+cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+conn.commit()
+
+# Define the table schema for storing text embeddings
 cur.execute("""
-CREATE TABLE IF NOT EXISTS summaries (
-    id BIGSERIAL PRIMARY KEY,
-    title TEXT,
-    summary TEXT,
-    details TEXT,
-    embedding VECTOR(2048)
+CREATE TABLE IF NOT EXISTS text_embeddings (
+    id SERIAL PRIMARY KEY,
+    document TEXT NOT NULL,
+    embedding vector(512)
 );
 """)
 conn.commit()
 
-def generate_summary(text):
-    """
-    Generate a summary of the given text using the GPT model.
-    """
-    # Use the GPTHandler instance to generate a summary
-    summary = gpt.generate_response(text)
-    return summary.strip()
 
-def generate_details(text):
+def generate_embedding(text):
     """
-    Generate detailed points from the text using the GPT model.
+    Generate a text embedding using the GPT model.
     """
-    # Use the GPTHandler instance to generate details
-    details = gpt.generate_response(text, specific_parameters_for_details)
-    return details.strip()
-
-def store_summary_in_db(title, summary, details, embedding):
-    """
-    Store the generated summary, details, and embedding in the database.
-    """
-    # Insert the summary and details into the summaries table
-    cur.execute("INSERT INTO summaries (title, summary, details, embedding) VALUES (%s, %s, %s, %s)",
-                (title, summary, details, embedding))
-    conn.commit()
-
-def create_embedding_for_text(text):
-    """
-    Create an embedding vector for the given text.
-    """
-    # Use the GPTHandler instance or another method to generate an embedding for the text
+    # Generate the embedding using the GPTHandler instance or another method
+    # This is a placeholder, replace with actual method to obtain embeddings
     embedding = gpt.create_embedding(text)
     return embedding
 
+
+def store_embedding_in_db(document, embedding):
+    """
+    Store the document and its embedding in the database.
+    """
+    # Insert the document and its embedding into the database
+    cur.execute("INSERT INTO text_embeddings (document, embedding) VALUES (%s, %s)",
+                (document, embedding))
+    conn.commit()
+
+
+def batch_store_embeddings_in_db(data):
+    """
+    Batch store documents and their embeddings in the database for efficiency.
+    """
+    # Prepare the list of tuples to insert
+    embeddings_data = [(text, generate_embedding(text)) for text in data]
+    # Use execute_values to perform batch insertion
+    execute_values(cur,
+                   "INSERT INTO text_embeddings (document, embedding) VALUES %s",
+                   embeddings_data)
+    conn.commit()
+
+
 # Example usage of the functions
-text_to_summarize = "Your large text dataset here"
-summary = generate_summary(text_to_summarize)
-details = generate_details(text_to_summarize)
-embedding = create_embedding_for_text(text_to_summarize)
+# Load your data - this should be a list of documents/texts
+with open('reference/test-data.txt', 'r') as file:
+    data = file.readlines()
 
-# Store the generated data in the database
-store_summary_in_db("Title of the text", summary, details, embedding)
+# Batch store documents and their embeddings in the database
+batch_store_embeddings_in_db(data)
 
-# Close the cursor and connection when done
+# Don't forget to close the cursor and connection when done
 cur.close()
 conn.close()
