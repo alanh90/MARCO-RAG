@@ -1,10 +1,10 @@
 # Infinite-Context Project
 
+![Infinite-Context Logo](images/infinite-context-img.png)
+
 ## Introduction
 
 The Infinite-Context Project is an open-source initiative aimed at enhancing how language models process and retrieve information from extensive text datasets. By introducing a novel, multilayered summary indexing system, this project seeks to significantly improve the efficiency of language models, enabling them to handle large-scale texts. Mimicking the hierarchical structure of human memory for information recall, the Infinite-Context system presents a pioneering solution for comprehensive database analysis and interaction.
-
-![Infinite-Context Logo](images/infinite-context.webp)
 
 ## Features
 
