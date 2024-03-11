@@ -1,6 +1,6 @@
 # Infinite-Context (WIP)
 
-![Infinite-Context Logo](images/infinite-context-img.png)
+![Infinite-Context Logo](images/infinite-context-img_v2.png)
 
 ## Introduction
 
