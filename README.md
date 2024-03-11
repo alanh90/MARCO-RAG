@@ -1,4 +1,4 @@
-# Infinite-Context
+# Infinite-Context (WIP)
 
 ![Infinite-Context Logo](images/infinite-context-img.png)
 
