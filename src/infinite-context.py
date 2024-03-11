@@ -1,76 +1,46 @@
-# infinite-context.py
-import util
-from gpt_handler import GPTHandler
-import psycopg2
+# Import necessary libraries
 import numpy as np
-from psycopg2.extras import execute_values
+import faiss
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-# Retrieve database connection string from environment variables
-DB_CONNECTION_STRING = util.get_environment_variable('DB_CONNECTION_STRING')
+# Setup the document embeddings and FAISS index for the retriever
+docs = ["Genesis creation narrative", "Exodus and liberation", "The life and teachings of Jesus"]
+doc_embeddings = np.random.rand(len(docs), 768).astype('float32')  # Dummy embeddings for illustration
 
-# Instantiate GPTHandler with your chosen model
-gpt = GPTHandler(model="gpt-3.5-turbo-1106")
-
-# Connect to the PostgreSQL database
-conn = psycopg2.connect(DB_CONNECTION_STRING)
-cur = conn.cursor()
-
-# Enable pgvector extension
-cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-conn.commit()
-
-# Define the table schema for storing text embeddings
-cur.execute("""
-CREATE TABLE IF NOT EXISTS text_embeddings (
-    id SERIAL PRIMARY KEY,
-    document TEXT NOT NULL,
-    embedding vector(512)
-);
-""")
-conn.commit()
+index = faiss.IndexFlatL2(768)  # 768 is the dimension of embeddings, assuming using BERT or similar
+index.add(doc_embeddings)
 
 
-def generate_embedding(text):
-    """
-    Generate a text embedding using the GPT model.
-    """
-    # Generate the embedding using the GPTHandler instance or another method
-    # This is a placeholder, replace with actual method to obtain embeddings
-    embedding = gpt.create_embedding(text)
-    return embedding
+def retrieve_documents(query_embedding, k=1):
+    """Retrieves top-k documents based on the query embedding."""
+    _, indices = index.search(np.array([query_embedding]).astype('float32'), k)
+    return [docs[i] for i in indices[0]]
 
 
-def store_embedding_in_db(document, embedding):
-    """
-    Store the document and its embedding in the database.
-    """
-    # Insert the document and its embedding into the database
-    cur.execute("INSERT INTO text_embeddings (document, embedding) VALUES (%s, %s)",
-                (document, embedding))
-    conn.commit()
+# Setup the generator using the Hugging Face transformers
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+model = GPT2LMHeadModel.from_pretrained('gpt2')
 
 
-def batch_store_embeddings_in_db(data):
-    """
-    Batch store documents and their embeddings in the database for efficiency.
-    """
-    # Prepare the list of tuples to insert
-    embeddings_data = [(text, generate_embedding(text)) for text in data]
-    # Use execute_values to perform batch insertion
-    execute_values(cur,
-                   "INSERT INTO text_embeddings (document, embedding) VALUES %s",
-                   embeddings_data)
-    conn.commit()
+def generate_answer(prompt):
+    """Generates an answer based on the given prompt using GPT-2."""
+    inputs = tokenizer.encode(prompt, return_tensors='pt')
+    outputs = model.generate(inputs, max_length=50, num_return_sequences=1)
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
 
 
-# Example usage of the functions
-# Load your data - this should be a list of documents/texts
-with open('reference/test-data.txt', 'r') as file:
-    data = file.readlines()
+def rag_answer(query):
+    """Generates an answer to a query using a RAG-like approach by combining retrieved documents and GPT-2."""
+    # Mock query embedding (in practice, use a model to generate this based on the query)
+    query_embedding = np.random.rand(768).astype('float32')
 
-# Batch store documents and their embeddings in the database
-batch_store_embeddings_in_db(data)
+    # Retrieve documents based on the query embedding
+    retrieved_docs = retrieve_documents(query_embedding, k=2)
+    prompt = f"Based on: {', '.join(retrieved_docs)}. {query}"
 
-# Don't forget to close the cursor and connection when done
-cur.close()
-conn.close()
+    # Generate answer using the combined prompt
+    return generate_answer(prompt)
+
+
+# Example usage
+print(rag_answer("Who led the Israelites out of Egypt?"))
