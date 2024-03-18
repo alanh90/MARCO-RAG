@@ -14,6 +14,7 @@ nltk.download('stopwords')
 
 class InfiniteContextRAG:
     def __init__(self, reference_data_path, similarity_threshold=0.8):
+        print("Initializing InfiniteContextRAG...")
         self.reference_data_path = reference_data_path
         self.similarity_threshold = similarity_threshold
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -24,22 +25,28 @@ class InfiniteContextRAG:
         self.levels = []
         self.graph = None
         self.initialize_system()
+        print("InfiniteContextRAG initialized.")
 
     def preprocess_text(self, text):
+        print("Preprocessing text...")
         tokens = self.tokenizer.tokenize(text)
         stop_words = set(stopwords.words('english'))
         tokens = [token for token in tokens if token not in stop_words]
         preprocessed_text = ' '.join(tokens)
+        print("Text preprocessed.")
         return preprocessed_text
 
     def extract_topics(self, documents, num_topics=5):
+        print("Extracting topics...")
         embeddings = self.generate_embeddings(documents)
         embeddings = np.abs(embeddings)  # Take the absolute values of the embeddings
         nmf = NMF(n_components=num_topics)
         topics = nmf.fit_transform(embeddings)
+        print("Topics extracted.")
         return topics
 
     def generate_embeddings(self, documents):
+        print("Generating embeddings...")
         embeddings = []
         for doc in documents:
             if isinstance(doc, str):
@@ -52,24 +59,29 @@ class InfiniteContextRAG:
                 embeddings.extend(doc_embeddings)
             else:
                 raise ValueError("Unsupported document type")
+        print("Embeddings generated.")
         return np.concatenate(embeddings, axis=0)
 
     def create_graph_structure(self, nodes, embeddings):
+        print("Creating graph structure...")
         num_nodes = len(nodes)
         adjacency_matrix = np.zeros((num_nodes, num_nodes))
         similarity_matrix = cosine_similarity(embeddings)
         threshold = 0.5
         adjacency_matrix = np.where(similarity_matrix >= threshold, similarity_matrix, 0)
         graph = {'nodes': nodes, 'adjacency_matrix': adjacency_matrix}
+        print("Graph structure created.")
         return graph
 
     def load_hierarchical_embeddings(self):
+        print("Loading hierarchical embeddings...")
         text = self.preprocess_text(open(self.reference_data_path).read())
         topics = self.extract_topics(text)
         levels = [topics]
 
         current_level = topics
         while True:
+            print(f"Processing level {len(levels)}...")
             embeddings = self.generate_embeddings(current_level)
             clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=self.similarity_threshold)
             cluster_labels = clustering.fit_predict(embeddings)
@@ -81,15 +93,19 @@ class InfiniteContextRAG:
             levels.append(current_level)
 
         graph = self.create_graph_structure(levels, embeddings)
+        print("Hierarchical embeddings loaded.")
         return levels, graph
 
     def generate_query_embedding(self, query):
+        print("Generating query embedding...")
         inputs = self.tokenizer(query, return_tensors='pt')
         outputs = self.model(**inputs)
         query_embedding = outputs.last_hidden_state.mean(dim=1).detach().numpy()
+        print("Query embedding generated.")
         return query_embedding
 
     def retrieve_documents(self, query_embedding, k=1):
+        print("Retrieving documents...")
         retrieved_docs = []
         current_level_docs = self.levels[0]
 
@@ -102,19 +118,25 @@ class InfiniteContextRAG:
             current_level_docs = [level[i] for i in indices[0]]
             retrieved_docs.extend(current_level_docs)
 
+        print("Documents retrieved.")
         return retrieved_docs
 
     def generate_answer(self, prompt):
+        print("Generating answer...")
         input_ids = self.t5_tokenizer.encode(prompt, return_tensors='pt')
         outputs = self.t5_model.generate(input_ids)
         answer = self.t5_tokenizer.decode(outputs[0], skip_special_tokens=True)
+        print("Answer generated.")
         return answer
 
     def rag_answer(self, query, k=2):
+        print("Processing query:", query)
         query_embedding = self.generate_query_embedding(query)
         retrieved_docs = self.retrieve_documents(query_embedding, k)
         prompt = f"Based on: {', '.join(retrieved_docs)}. {query}"
-        return self.generate_answer(prompt)
+        answer = self.generate_answer(prompt)
+        print("RAG answer:", answer)
+        return answer
 
     def initialize_system(self):
         self.levels, self.graph = self.load_hierarchical_embeddings()
