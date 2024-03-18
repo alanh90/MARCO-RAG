@@ -45,24 +45,33 @@ class InfiniteContextRAG:
         print("Topics extracted.")
         return topics
 
-    def generate_embeddings(self, documents):
+    def generate_embeddings(self, documents, segment_size=512):
         print("Generating embeddings...")
         embeddings = []
-        total_docs = len(documents)
-        for i, doc in enumerate(documents, start=1):
+        total_segments = sum(len(doc) // segment_size + 1 for doc in documents)
+        segment_counter = 0
+
+        for doc in documents:
             if isinstance(doc, str):
-                inputs = self.tokenizer(doc, padding=True, truncation=True, return_tensors='pt')
-                outputs = self.model(**inputs)
-                doc_embeddings = outputs.last_hidden_state.mean(dim=1).detach().numpy()
+                doc_embeddings = []
+                for i in range(0, len(doc), segment_size):
+                    segment = doc[i:i + segment_size]
+                    inputs = self.tokenizer(segment, padding=True, truncation=True, return_tensors='pt')
+                    outputs = self.model(**inputs)
+                    segment_embeddings = outputs.last_hidden_state.mean(dim=1).detach().numpy()
+                    doc_embeddings.append(segment_embeddings)
+
+                    segment_counter += 1
+                    progress = (segment_counter / total_segments) * 100
+                    print(f"Embedding generation progress: {progress:.2f}%", end='\r')
+
+                doc_embeddings = np.concatenate(doc_embeddings, axis=0)
                 embeddings.append(doc_embeddings)
             elif isinstance(doc, list):
-                doc_embeddings = self.generate_embeddings(doc)
+                doc_embeddings = self.generate_embeddings(doc, segment_size)
                 embeddings.extend(doc_embeddings)
             else:
                 raise ValueError("Unsupported document type")
-
-            progress = (i / total_docs) * 100
-            print(f"Embedding generation progress: {progress:.2f}%", end='\r')
 
         embeddings = np.concatenate(embeddings, axis=0)
         print("\nEmbeddings generated.")
