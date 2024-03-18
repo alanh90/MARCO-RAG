@@ -34,15 +34,25 @@ class InfiniteContextRAG:
 
     def extract_topics(self, documents, num_topics=5):
         embeddings = self.generate_embeddings(documents)
+        embeddings = np.abs(embeddings)  # Take the absolute values of the embeddings
         nmf = NMF(n_components=num_topics)
         topics = nmf.fit_transform(embeddings)
         return topics
 
-    def generate_embeddings(self, text):
-        inputs = self.tokenizer(text, padding=True, truncation=True, return_tensors='pt')
-        outputs = self.model(**inputs)
-        embeddings = outputs.last_hidden_state.mean(dim=1).detach().numpy()
-        return embeddings
+    def generate_embeddings(self, documents):
+        embeddings = []
+        for doc in documents:
+            if isinstance(doc, str):
+                inputs = self.tokenizer(doc, padding=True, truncation=True, return_tensors='pt')
+                outputs = self.model(**inputs)
+                doc_embeddings = outputs.last_hidden_state.mean(dim=1).detach().numpy()
+                embeddings.append(doc_embeddings)
+            elif isinstance(doc, list):
+                doc_embeddings = self.generate_embeddings(doc)
+                embeddings.extend(doc_embeddings)
+            else:
+                raise ValueError("Unsupported document type")
+        return np.concatenate(embeddings, axis=0)
 
     def create_graph_structure(self, nodes, embeddings):
         num_nodes = len(nodes)
@@ -111,6 +121,6 @@ class InfiniteContextRAG:
 
 
 # Example usage
-reference_data_path = 'infinite-context/reference/test-data.txt'
+reference_data_path = '../reference/test-data.txt'
 rag = InfiniteContextRAG(reference_data_path)
 print(rag.rag_answer("Who led the Israelites out of Egypt?"))
