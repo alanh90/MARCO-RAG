@@ -48,7 +48,8 @@ class InfiniteContextRAG:
     def generate_embeddings(self, documents):
         print("Generating embeddings...")
         embeddings = []
-        for doc in documents:
+        total_docs = len(documents)
+        for i, doc in enumerate(documents, start=1):
             if isinstance(doc, str):
                 inputs = self.tokenizer(doc, padding=True, truncation=True, return_tensors='pt')
                 outputs = self.model(**inputs)
@@ -59,8 +60,13 @@ class InfiniteContextRAG:
                 embeddings.extend(doc_embeddings)
             else:
                 raise ValueError("Unsupported document type")
-        print("Embeddings generated.")
-        return np.concatenate(embeddings, axis=0)
+
+            progress = (i / total_docs) * 100
+            print(f"Embedding generation progress: {progress:.2f}%", end='\r')
+
+        embeddings = np.concatenate(embeddings, axis=0)
+        print("\nEmbeddings generated.")
+        return embeddings
 
     def create_graph_structure(self, nodes, embeddings):
         print("Creating graph structure...")
