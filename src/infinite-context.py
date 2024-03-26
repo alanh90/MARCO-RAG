@@ -8,14 +8,18 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import NMF
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 from util import get_environment_variable
+from gpt_handler import GPTHandler
 
 nltk.download('punkt')
 nltk.download('stopwords')
 
+
 class InfiniteContextRAG:
-    def __init__(self, reference_data_path, similarity_threshold=0.8):
+    def __init__(self, reference_path, similarity_threshold=0.8):
         print("Initializing InfiniteContextRAG...")
-        self.reference_data_path = reference_data_path
+        self.gpt_handler = GPTHandler()
+
+        self.reference_data_path = reference_path
         self.similarity_threshold = similarity_threshold
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.model = BertModel.from_pretrained('bert-base-uncased')
@@ -144,17 +148,45 @@ class InfiniteContextRAG:
         print("Answer generated.")
         return answer
 
+    def extract_relevant_info(self, retrieved_docs, query):
+        print("Extracting relevant information...")
+        relevant_info = []
+        query_tokens = set(self.tokenizer.tokenize(query))
+
+        for doc in retrieved_docs:
+            doc_tokens = set(self.tokenizer.tokenize(doc))
+            if len(query_tokens.intersection(doc_tokens)) > 0:
+                relevant_info.append(doc)
+
+        print("Relevant information extracted.")
+        return relevant_info
+
     def rag_answer(self, query, k=2):
         print("Processing query:", query)
         query_embedding = self.generate_query_embedding(query)
         retrieved_docs = self.retrieve_documents(query_embedding, k)
-        prompt = f"Based on: {', '.join(retrieved_docs)}. {query}"
+
+        relevant_info = self.extract_relevant_info(retrieved_docs, query)
+        self.temp_memory.extend(relevant_info)
+
+        prompt = f"Based on the information: {', '.join(self.temp_memory)}. {query}"
         answer = self.generate_answer(prompt)
         print("RAG answer:", answer)
+
+        self.temp_memory = []  # Clear temporary memory after generating the answer
+
         return answer
 
     def initialize_system(self):
         self.levels, self.graph = self.load_hierarchical_embeddings()
+
+    def summarize_text(self, text):
+        # Generate summary using GPTHandler
+        return self.gpt_handler.generate_summary(text)
+
+    def generate_answer(self, prompt):
+        # Generate answer using GPTHandler
+        return self.gpt_handler.ask_gpt(prompt)
 
 
 # Example usage
