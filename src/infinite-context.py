@@ -6,51 +6,54 @@ from sklearn.metrics.pairwise import cosine_similarity
 from transformers import BertModel, BertTokenizer
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import NMF
-from transformers import T5ForConditionalGeneration, T5Tokenizer
 from util import get_environment_variable
 from gpt_handler import GPTHandler
 
-nltk.download('punkt')
-nltk.download('stopwords')
+nltk.download('punkt')  # Used for sentence tokenization (sent1,sent2,etc...)
+nltk.download('stopwords')  # Used to remove unimportant words for data compression
 
 
 class InfiniteContextRAG:
-    def __init__(self, reference_path, similarity_threshold=0.8):
+    def __init__(self, reference_path, language_model, similarity_threshold=0.8):
         print("Initializing InfiniteContextRAG...")
-        self.gpt_handler = GPTHandler()
 
+        self.language_model = language_model
         self.reference_data_path = reference_path
         self.similarity_threshold = similarity_threshold
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.model = BertModel.from_pretrained('bert-base-uncased')
-        self.t5_tokenizer = T5Tokenizer.from_pretrained('t5-base')
-        self.t5_model = T5ForConditionalGeneration.from_pretrained('t5-base')
         self.index = None
         self.levels = []
         self.graph = None
         self.initialize_system()
+
         print("InfiniteContextRAG initialized.")
 
     def preprocess_text(self, text):
         print("Preprocessing text...")
+
         tokens = self.tokenizer.tokenize(text)
         stop_words = set(stopwords.words('english'))
         tokens = [token for token in tokens if token not in stop_words]
         preprocessed_text = ' '.join(tokens)
+
         print("Text preprocessed.")
         return preprocessed_text
 
     def extract_topics(self, documents, num_topics=5):
         print("Extracting topics...")
+
         embeddings = self.generate_embeddings(documents)
         embeddings = np.abs(embeddings)  # Take the absolute values of the embeddings
         nmf = NMF(n_components=num_topics)
         topics = nmf.fit_transform(embeddings)
+
         print("Topics extracted.")
         return topics
 
     def generate_embeddings(self, documents, segment_size=512):
         print("Generating embeddings...")
+
         embeddings = []
         total_segments = sum(len(doc) // segment_size + 1 for doc in documents)
         segment_counter = 0
@@ -79,10 +82,12 @@ class InfiniteContextRAG:
 
         embeddings = np.concatenate(embeddings, axis=0)
         print("\nEmbeddings generated.")
+
         return embeddings
 
     def create_graph_structure(self, nodes, embeddings):
         print("Creating graph structure...")
+
         num_nodes = len(nodes)
         adjacency_matrix = np.zeros((num_nodes, num_nodes))
         similarity_matrix = cosine_similarity(embeddings)
@@ -90,10 +95,12 @@ class InfiniteContextRAG:
         adjacency_matrix = np.where(similarity_matrix >= threshold, similarity_matrix, 0)
         graph = {'nodes': nodes, 'adjacency_matrix': adjacency_matrix}
         print("Graph structure created.")
+
         return graph
 
     def load_hierarchical_embeddings(self):
         print("Loading hierarchical embeddings...")
+
         text = self.preprocess_text(open(self.reference_data_path).read())
         topics = self.extract_topics(text)
         levels = [topics]
@@ -117,14 +124,18 @@ class InfiniteContextRAG:
 
     def generate_query_embedding(self, query):
         print("Generating query embedding...")
+
         inputs = self.tokenizer(query, return_tensors='pt')
         outputs = self.model(**inputs)
         query_embedding = outputs.last_hidden_state.mean(dim=1).detach().numpy()
+
         print("Query embedding generated.")
+
         return query_embedding
 
     def retrieve_documents(self, query_embedding, k=1):
         print("Retrieving documents...")
+
         retrieved_docs = []
         current_level_docs = self.levels[0]
 
@@ -138,18 +149,21 @@ class InfiniteContextRAG:
             retrieved_docs.extend(current_level_docs)
 
         print("Documents retrieved.")
+
         return retrieved_docs
 
-    def generate_answer(self, prompt):
+    def generate_answer(self, query, relevant_info):
         print("Generating answer...")
-        input_ids = self.t5_tokenizer.encode(prompt, return_tensors='pt')
-        outputs = self.t5_model.generate(input_ids)
-        answer = self.t5_tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+        prompt = f"Based on the following relevant information:\n\n{relevant_info}\n\nAnswer the question: {query}"
+        answer = self.language_model.generate_response(prompt)
+
         print("Answer generated.")
         return answer
 
     def extract_relevant_info(self, retrieved_docs, query):
         print("Extracting relevant information...")
+
         relevant_info = []
         query_tokens = set(self.tokenizer.tokenize(query))
 
@@ -165,31 +179,33 @@ class InfiniteContextRAG:
         print("Processing query:", query)
         query_embedding = self.generate_query_embedding(query)
         retrieved_docs = self.retrieve_documents(query_embedding, k)
-
         relevant_info = self.extract_relevant_info(retrieved_docs, query)
-        self.temp_memory.extend(relevant_info)
-
-        prompt = f"Based on the information: {', '.join(self.temp_memory)}. {query}"
-        answer = self.generate_answer(prompt)
+        answer = self.generate_answer(query, relevant_info)
         print("RAG answer:", answer)
-
-        self.temp_memory = []  # Clear temporary memory after generating the answer
-
         return answer
+
+    def interactive_mode(self):
+        while True:
+            user_input = input("Ask a question (or type 'quit' to exit): ")
+            if user_input.lower() == 'quit':
+                break
+            answer = self.rag_answer(user_input)
+            print("RAG answer:", answer)
 
     def initialize_system(self):
         self.levels, self.graph = self.load_hierarchical_embeddings()
 
     def summarize_text(self, text):
-        # Generate summary using GPTHandler
-        return self.gpt_handler.generate_summary(text)
+        # Generate summary using the language model
+        return self.language_model.generate_summary(text)
 
-    def generate_answer(self, prompt):
-        # Generate answer using GPTHandler
-        return self.gpt_handler.ask_gpt(prompt)
+    def generate_embeddings(self, text):
+        # Generate embeddings using the language model
+        return self.language_model.generate_embeddings(text)
 
 
 # Example usage
+language_model = GPTHandler()
 reference_data_path = '../reference/test-data.txt'
-rag = InfiniteContextRAG(reference_data_path)
-print(rag.rag_answer("Who led the Israelites out of Egypt?"))
+rag = InfiniteContextRAG(reference_data_path,language_model)
+rag.interactive_mode()
