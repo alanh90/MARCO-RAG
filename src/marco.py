@@ -295,6 +295,6 @@ class MARCO:
 
 # Example usage
 language_model = GPTHandler()
-reference_data_path = '../reference/test-data.txt'
+reference_data_path = '../reference/small-test-data.txt'
 rag = MARCO(reference_data_path, language_model)
 rag.interactive_mode()
