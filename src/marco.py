@@ -1,3 +1,10 @@
+"""
+MARCO: Multi-layered Abstraction Retrieval and Contextual Answering
+
+This module implements the MARCO system, which utilizes a multi-layered abstraction approach to efficiently retrieve relevant information from a large corpus of documents and generate accurate and contextually appropriate answers. The system mimics the way humans process and recall information by leveraging techniques like summarization, topic modeling, and graph-based representation.
+
+Author: Alan Hourmand"""
+
 import numpy as np
 import faiss
 import nltk
@@ -9,11 +16,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from util import get_environment_variable
 from gpt_handler import GPTHandler
 
-nltk.download('punkt')
-nltk.download('stopwords')
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    print("Downloading punkt...")
+    nltk.download('punkt')
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    print("Downloading stopwords...")
+    nltk.download('stopwords')
 
 
-class InfiniteContextRAG:
+class MARCO:
     def __init__(self, reference_path, language_model, similarity_threshold=0.8, satisfaction_threshold=0.7):
         print("Initializing InfiniteContextRAG...")
 
@@ -280,5 +296,5 @@ class InfiniteContextRAG:
 # Example usage
 language_model = GPTHandler()
 reference_data_path = '../reference/test-data.txt'
-rag = InfiniteContextRAG(reference_data_path, language_model)
+rag = MARCO(reference_data_path, language_model)
 rag.interactive_mode()
