@@ -42,15 +42,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 Contributing
 We welcome contributions to the MARCO project! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request. Let's work together to enhance the capabilities of this powerful question-answering system.
 
-Acknowledgements
-We would like to express our gratitude to the open-source community for their invaluable contributions and the various libraries and tools that made the development of MARCO possible.
-
 Contact
 For any inquiries or further information, please contact the project maintainer:
 
 Alan Hourmand
 Email: alan@alanhourmand.com
-
-This updated README file provides a comprehensive overview of the MARCO project, highlighting its key features, installation instructions, usage examples, and licensing information. It also includes sections for contributing, acknowledgements, and contact information.
-
-Feel free to further customize the README file based on your project's specific requirements, such as adding more detailed installation steps, providing additional usage examples, or including any other relevant information.
