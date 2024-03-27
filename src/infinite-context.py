@@ -4,8 +4,7 @@ import nltk
 from nltk.corpus import stopwords
 from sklearn.metrics.pairwise import cosine_similarity
 from transformers import BertModel, BertTokenizer
-from sklearn.cluster import AgglomerativeClustering
-from sklearn.decomposition import NMF
+from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.feature_extraction.text import TfidfVectorizer
 from util import get_environment_variable
 from gpt_handler import GPTHandler
@@ -40,11 +39,13 @@ class InfiniteContextRAG:
         preprocessed_text = ' '.join(tokens)
         return preprocessed_text
 
-    def extract_topics(self, documents, num_topics=5):
-        embeddings = self.generate_embeddings(documents)
-        embeddings = np.abs(embeddings)
-        nmf = NMF(n_components=num_topics)
-        topics = nmf.fit_transform(embeddings)
+    def extract_topics(self, documents, num_topics=None):
+        preprocessed_docs = [self.preprocess_text(doc) for doc in documents]
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform(preprocessed_docs)
+
+        lda = LatentDirichletAllocation(n_components=num_topics, random_state=42)
+        topics = lda.fit_transform(tfidf_matrix)
         return topics
 
     def generate_embeddings(self, documents, segment_size=512):
@@ -82,8 +83,7 @@ class InfiniteContextRAG:
         num_nodes = len(nodes)
         adjacency_matrix = np.zeros((num_nodes, num_nodes))
         similarity_matrix = cosine_similarity(embeddings)
-        threshold = 0.5
-        adjacency_matrix = np.where(similarity_matrix >= threshold, similarity_matrix, 0)
+        adjacency_matrix = np.where(similarity_matrix >= self.similarity_threshold, similarity_matrix, 0)
         graph = {'nodes': nodes, 'adjacency_matrix': adjacency_matrix}
         return graph
 
@@ -99,10 +99,9 @@ class InfiniteContextRAG:
         return query_embedding
 
     def retrieve_documents(self, query_embedding, layer_embeddings, k=1):
-        index = faiss.IndexFlatL2(query_embedding.shape[1])
-        index.add(np.array(layer_embeddings).astype('float32'))
-        _, indices = index.search(np.array([query_embedding]).astype('float32'), k)
-        retrieved_docs = [layer_embeddings[i] for i in indices[0]]
+        similarity_scores = cosine_similarity(query_embedding, layer_embeddings)[0]
+        top_indices = similarity_scores.argsort()[-k:][::-1]
+        retrieved_docs = [layer_embeddings[i] for i in top_indices]
         return retrieved_docs
 
     def extract_relevant_info(self, retrieved_docs, query):
