@@ -24,6 +24,7 @@ class InfiniteContextRAG:
         self.model = BertModel.from_pretrained('bert-base-uncased')
         self.index = None
         self.levels = []
+        self.notes = []
         self.graph = None
         self.initialize_system()
 
@@ -177,12 +178,33 @@ class InfiniteContextRAG:
 
     def rag_answer(self, query, k=2):
         print("Processing query:", query)
-        query_embedding = self.generate_query_embedding(query)
-        retrieved_docs = self.retrieve_documents(query_embedding, k)
-        relevant_info = self.extract_relevant_info(retrieved_docs, query)
-        answer = self.generate_answer(query, relevant_info)
+        self.notes = []  # Reset notes for each query
+
+        # Determine the relevant abstraction layer(s) based on the query
+        relevant_layers = self.determine_relevant_layers(query)
+
+        # Process the query using the relevant abstraction layers
+        for layer in relevant_layers:
+            query_embedding = self.generate_query_embedding(query)
+            retrieved_docs = self.retrieve_documents(query_embedding, layer['embeddings'], k)
+            relevant_info = self.extract_relevant_info(retrieved_docs, query)
+            self.notes.append(relevant_info)  # Store relevant information as notes
+
+        # Generate the final answer using the collected notes
+        answer = self.generate_answer(query, self.notes)
         print("RAG answer:", answer)
         return answer
+
+    def determine_relevant_layers(self, query):
+        # Implement logic to determine the relevant abstraction layers based on the query
+        # This can involve analyzing the query complexity, specificity, or other criteria
+        # Return a list of relevant layers
+        pass
+
+    def retrieve_documents(self, query_embedding, layer_embeddings, k=1):
+        # Implement logic to retrieve relevant documents from the specific abstraction layer
+        # based on the query embedding and layer embeddings
+        pass
 
     def interactive_mode(self):
         while True:
@@ -193,7 +215,32 @@ class InfiniteContextRAG:
             print("RAG answer:", answer)
 
     def initialize_system(self):
-        self.levels, self.graph = self.load_hierarchical_embeddings()
+        print("Initializing system...")
+        text = self.preprocess_text(open(self.reference_data_path).read())
+        self.levels = self.create_abstraction_layers(text)
+        self.graph = self.create_graph_structure(self.levels)
+        print("System initialized.")
+
+    def create_abstraction_layers(self, text, num_layers=3):
+        print("Creating abstraction layers...")
+        layers = []
+        current_text = text
+
+        for i in range(num_layers):
+            print(f"Processing layer {i + 1}...")
+            summary = self.summarize_text(current_text)
+            topics = self.extract_topics(summary)
+            embeddings = self.generate_embeddings(summary)
+            layer = {
+                'summary': summary,
+                'topics': topics,
+                'embeddings': embeddings
+            }
+            layers.append(layer)
+            current_text = summary
+
+        print("Abstraction layers created.")
+        return layers
 
     def summarize_text(self, text):
         # Generate summary using the language model
