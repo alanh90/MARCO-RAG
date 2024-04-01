@@ -15,6 +15,11 @@ from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.feature_extraction.text import TfidfVectorizer
 from util import get_environment_variable
 from gpt_handler import GPTHandler
+from nltk.tokenize import word_tokenize
+import gensim
+from gensim.utils import simple_preprocess
+from gensim.corpora import Dictionary
+from gensim.models import LdaMulticore
 
 try:
     nltk.data.find('tokenizers/punkt')
@@ -31,7 +36,7 @@ except LookupError:
 
 class MARCO:
     def __init__(self, reference_path, language_model, similarity_threshold=0.8, satisfaction_threshold=0.7):
-        print("Initializing InfiniteContextRAG...")
+        print("Initializing MARCO...")
 
         self.language_model = language_model
         self.reference_data_path = reference_path
@@ -49,19 +54,29 @@ class MARCO:
         print("InfiniteContextRAG initialized.")
 
     def preprocess_text(self, text):
-        tokens = self.tokenizer.tokenize(text)
+        tokens = nltk.word_tokenize(text)
         stop_words = set(stopwords.words('english'))
-        tokens = [token for token in tokens if token not in stop_words]
+        tokens = [token.lower() for token in tokens if token.lower() not in stop_words]
         preprocessed_text = ' '.join(tokens)
         return preprocessed_text
 
     def extract_topics(self, documents, num_topics=None):
-        preprocessed_docs = [self.preprocess_text(doc) for doc in documents]
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform(preprocessed_docs)
+        # Tokenize and preprocess the documents
+        preprocessed_docs = [simple_preprocess(doc) for doc in documents]
 
-        lda = LatentDirichletAllocation(n_components=num_topics, random_state=42)
-        topics = lda.fit_transform(tfidf_matrix)
+        # Create a dictionary from the preprocessed documents
+        dictionary = Dictionary(preprocessed_docs)
+
+        # Convert the preprocessed documents into a bag-of-words corpus
+        corpus = [dictionary.doc2bow(doc) for doc in preprocessed_docs]
+
+        # Train the LDA model
+        lda_model = LdaMulticore(corpus=corpus, id2word=dictionary, num_topics=num_topics, workers=2, passes=10,
+                                 random_state=42)
+
+        # Get the topics
+        topics = lda_model.show_topics(formatted=False)
+
         return topics
 
     def generate_embeddings(self, documents, segment_size=512):
@@ -217,8 +232,10 @@ class MARCO:
         avg_relevance_score = sum(relevance_scores) / len(relevance_scores) if relevance_scores else 0.0
 
         # Calculate coverage of query topics
-        query_topics = set(self.extract_topics([self.preprocess_text(note) for note in notes], num_topics=3))
-        coverage_score = len(query_topics.intersection(set(weighted_chunks.keys()))) / len(query_topics)
+        preprocessed_notes = [self.preprocess_text(note) for note in notes]
+        query_topics = self.extract_topics(preprocessed_notes, num_topics=3)
+        query_topic_words = set([word for topic in query_topics for word, _ in topic[1]])
+        coverage_score = len(query_topic_words.intersection(set(weighted_chunks.keys()))) / len(query_topic_words)
 
         # Combine average relevance score and coverage score
         satisfaction_score = 0.7 * avg_relevance_score + 0.3 * coverage_score
